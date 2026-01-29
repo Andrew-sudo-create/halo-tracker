@@ -34,14 +34,17 @@ const calculateCost = (model, input, output) => {
 
 // 2. The Tracking Interceptor
 const apiProxy = createProxyMiddleware({
-    target: process.env.PROXY_TARGET,
+    router: (req) => {
+        return req.headers['x-target-url'] || process.env.PROXY_TARGET;
+    },
     changeOrigin: true,
     // We will remove pathRewrite for a second to see what's happening
     on: {
         proxyReq: (proxyReq, req) => {
             req.startTime = Date.now();
+            const target = req.headers['x-target-url'] || process.env.PROXY_TARGET;
             // DEBUG: See the exact URL being sent to the target
-            console.log(`📡 Proxying: ${req.method} ${req.url} -> ${process.env.PROXY_TARGET}${proxyReq.path}`);
+            console.log(`📡 Proxying: ${req.method} ${req.url} -> ${target}${proxyReq.path}`);
         },
         proxyRes: async (proxyRes, req, res) => {
             let body = [];
