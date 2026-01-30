@@ -210,4 +210,5 @@ app.get('/api/health', (req, res) => {
 
 // Switch the route to handle EVERYTHING for testing (proxy)
 app.use('/', apiProxy);
-app.listen(3000, () => console.log('🚀 Gateway Live on Port 3000'));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Gateway Live on Port ${PORT}`));
