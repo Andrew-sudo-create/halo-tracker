@@ -19,7 +19,9 @@ app.use(
         credentials: true,
     })
 );
-app.use(express.json());
+// ONLY parse JSON for internal /api routes. 
+// This leaves the body stream intact for the proxy to forward to OpenAI.
+app.use('/api', express.json());
 
 // 1. Cost Calculator Logic (Example for GPT-5.2)
 const calculateCost = (model, input, output) => {
