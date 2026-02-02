@@ -2,7 +2,18 @@ import express from 'express';
 import cors from 'cors';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { createClient } from '@supabase/supabase-js';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Load environment-specific config
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const nodeEnv = process.env.NODE_ENV || 'development';
+// For local development, use .env.local; for production (Heroku), use .env.production
+const envFile = nodeEnv === 'production' ? '.env.production' : '.env.local';
+const envPath = path.join(__dirname, envFile);
+console.log(`Loading environment from: ${envPath}`);
+dotenv.config({ path: envPath });
 
 const app = express();
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
@@ -58,9 +69,24 @@ const apiProxy = createProxyMiddleware({
 
                 if (proxyRes.headers['content-type']?.includes('application/json')) {
                     try {
-                        const model = req.headers['x-model'] || 'gpt-5.2';
-                        const inputTokens = Number(req.headers['x-input-tokens'] || 0);
-                        const outputTokens = Number(req.headers['x-output-tokens'] || 0);
+                        const responseData = JSON.parse(rawBody);
+                        const model = req.headers['x-model'] || responseData.model || 'unknown';
+                        
+                        // Get REAL token counts from OpenAI response
+                        let inputTokens = 0;
+                        let outputTokens = 0;
+                        
+                        if (responseData.usage) {
+                            inputTokens = responseData.usage.prompt_tokens || 0;
+                            outputTokens = responseData.usage.completion_tokens || 0;
+                            console.log(`✅ Real tokens from OpenAI: ${inputTokens} input, ${outputTokens} output`);
+                        } else {
+                            // Fallback to headers if usage not in response
+                            inputTokens = Number(req.headers['x-input-tokens'] || 0);
+                            outputTokens = Number(req.headers['x-output-tokens'] || 0);
+                            console.log(`⚠️  Using fallback tokens: ${inputTokens} input, ${outputTokens} output`);
+                        }
+                        
                         const estimatedCost = calculateCost(model, inputTokens, outputTokens);
 
                         const { error } = await supabase.from('api_usage_logs').insert({
@@ -155,12 +181,14 @@ app.get('/api/services', async (req, res) => {
         data.forEach(log => {
             const serviceName = log.service_name || 'Unknown Service';
             const endpoint = log.endpoint || '/';
-            const key = `${serviceName}::${endpoint}`;
+            const userId = log.user_id || 'Unknown';
+            const key = `${serviceName}::${endpoint}::${userId}`;
             
             if (!serviceBreakdown[key]) {
                 serviceBreakdown[key] = {
                     service_name: serviceName,
                     endpoint: endpoint,
+                    user_id: userId,
                     total_hits: 0,
                     success_count: 0,
                     error_count: 0,

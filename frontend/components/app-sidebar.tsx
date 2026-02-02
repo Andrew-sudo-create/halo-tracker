@@ -7,6 +7,7 @@ import {
   Home,
   Activity,
   Server,
+  Users,
 } from "lucide-react"
 import {
   Sidebar,
@@ -41,6 +42,11 @@ const navigationItems = [
     title: "Services",
     icon: Server,
     href: "/services",
+  },
+  {
+    title: "Clients",
+    icon: Users,
+    href: "/clients",
   },
 ]
 
