@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { log } from 'console';
+import zlib from 'zlib';
 
 // Load environment-specific config
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -62,11 +63,20 @@ const apiProxy = createProxyMiddleware({
         },
         proxyRes: async (proxyRes, req, res) => {
             let body = [];
-            proxyRes.on('data', (chunk) => body.push(chunk));
-            proxyRes.on('end', async () => {
+            let stream = proxyRes;
+            
+            // Handle gzip compression
+            if (proxyRes.headers['content-encoding'] === 'gzip') {
+                stream = proxyRes.pipe(zlib.createGunzip());
+            }
+            
+            stream.on('data', (chunk) => body.push(chunk));
+            stream.on('end', async () => {
                 const rawBody = Buffer.concat(body).toString();
 
-                console.log('rawBody:', rawBody); // Debug: log the raw response body
+                // Log decompressed response (truncate if very long)
+                const displayBody = rawBody.length > 500 ? rawBody.substring(0, 500) + '...' : rawBody;
+                console.log(`📦 Decompressed Response: ${displayBody}`);
                 
                 console.log(`📥 Response: ${proxyRes.statusCode} | Content-Type: ${proxyRes.headers['content-type']}`);
 
