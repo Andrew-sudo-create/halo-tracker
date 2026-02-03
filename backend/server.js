@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { log } from 'console';
 
 // Load environment-specific config
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +65,8 @@ const apiProxy = createProxyMiddleware({
             proxyRes.on('data', (chunk) => body.push(chunk));
             proxyRes.on('end', async () => {
                 const rawBody = Buffer.concat(body).toString();
+
+                console.log('rawBody:', rawBody); // Debug: log the raw response body
                 
                 console.log(`📥 Response: ${proxyRes.statusCode} | Content-Type: ${proxyRes.headers['content-type']}`);
 
