@@ -49,6 +49,9 @@ interface ServiceData {
   success_rate: string
   estimated_cost: number
   last_used: string
+  total_input_tokens: number
+  total_output_tokens: number
+  total_tokens: number
 }
 
 export function ApiServicesBreakdown() {
@@ -227,13 +230,14 @@ export function ApiServicesBreakdown() {
                 <TableHead className="text-right">Success Rate</TableHead>
                 <TableHead className="text-right">Avg Latency</TableHead>
                 <TableHead className="text-right">Est. Cost</TableHead>
+                <TableHead className="text-right">Tokens</TableHead>
                 <TableHead>Last Used</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredAndSortedServices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No services found matching your filters
                   </TableCell>
                 </TableRow>
@@ -285,6 +289,12 @@ export function ApiServicesBreakdown() {
                           <div className="flex items-center justify-end gap-1">
                             <DollarSign className="size-3 text-muted-foreground" />
                             <span className="text-sm tabular-nums">{service.estimated_cost.toFixed(4)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <TrendingUp className="size-3 text-muted-foreground" />
+                            <span className="text-sm tabular-nums">{(service.total_tokens || 0).toLocaleString()}</span>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -358,6 +368,17 @@ export function ApiServicesBreakdown() {
                             </div>
                             <div className="text-xl font-bold">{successRate}%</div>
                             <Progress value={successRate} className="h-1.5 mt-1.5" />
+                          </div>
+
+                          <div className="p-3 border rounded-lg">
+                            <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                              <TrendingUp className="size-3" />
+                              <span className="text-xs font-medium">Total Tokens</span>
+                            </div>
+                            <div className="text-xl font-bold">{(service.total_tokens || 0).toLocaleString()}</div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              In: {(service.total_input_tokens || 0).toLocaleString()} • Out: {(service.total_output_tokens || 0).toLocaleString()}
+                            </div>
                           </div>
                         </div>
 

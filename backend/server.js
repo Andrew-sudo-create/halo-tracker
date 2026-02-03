@@ -20,6 +20,12 @@ dotenv.config({ path: envPath });
 const app = express();
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
+const PRICING_TABLE = 'model_pricing';
+const PRICING_CACHE_TTL_MS = 5 * 60 * 1000;
+let pricingCache = new Map();
+let pricingCacheLoadedAt = 0;
+let pricingCacheLoading = null;
+
 // Enable CORS
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
     .split(",")
@@ -36,15 +42,67 @@ app.use(
 // This leaves the body stream intact for the proxy to forward to OpenAI.
 app.use('/api', express.json());
 
-// 1. Cost Calculator Logic (Example for GPT-5.2)
-const calculateCost = (model, input, output) => {
-    const prices = {
-        'gpt-5.2': { in: 1.75 / 1000000, out: 14.00 / 1000000 },
-        'claude-4.5': { in: 5.00 / 1000000, out: 25.00 / 1000000 },
-        'default': { in: 0, out: 0 }
-    };
-    const rate = prices[model] || prices['default'];
-    return (input * rate.in) + (output * rate.out);
+// 1. Cost Calculator Logic (Supabase pricing table)
+const ensurePricingCache = async () => {
+    const cacheAge = Date.now() - pricingCacheLoadedAt;
+    if (pricingCache.size && cacheAge < PRICING_CACHE_TTL_MS) return;
+    if (pricingCacheLoading) return pricingCacheLoading;
+
+    pricingCacheLoading = (async () => {
+        const { data, error } = await supabase
+            .from(PRICING_TABLE)
+            .select('model,tier,category,input_per_million,output_per_million,cached_input_per_million');
+
+        if (error) {
+            console.error('❌ PRICING LOAD ERROR:', error.message);
+            return;
+        }
+
+        const nextCache = new Map();
+        data.forEach((row) => {
+            const modelKey = String(row.model || '').toLowerCase();
+            const tierKey = String(row.tier || 'standard').toLowerCase();
+            const categoryKey = String(row.category || 'text').toLowerCase();
+            const key = `${tierKey}:${categoryKey}:${modelKey}`;
+            nextCache.set(key, {
+                input: Number(row.input_per_million || 0) / 1_000_000,
+                output: Number(row.output_per_million || 0) / 1_000_000,
+                cachedInput: Number(row.cached_input_per_million || 0) / 1_000_000,
+            });
+        });
+
+        pricingCache = nextCache;
+        pricingCacheLoadedAt = Date.now();
+    })();
+
+    await pricingCacheLoading;
+    pricingCacheLoading = null;
+};
+
+const getPricingRate = (model, tier = 'standard', category = 'text') => {
+    if (!model) return null;
+    const normalizedModel = String(model).toLowerCase();
+    const normalizedTier = String(tier).toLowerCase();
+    const normalizedCategory = String(category).toLowerCase();
+    const key = `${normalizedTier}:${normalizedCategory}:${normalizedModel}`;
+    if (pricingCache.has(key)) return pricingCache.get(key);
+
+    const withoutLatest = normalizedModel.replace(/-latest$/i, '');
+    const withoutDate = normalizedModel.replace(/-\d{4}-\d{2}-\d{2}$/i, '');
+    const candidates = [withoutLatest, withoutDate];
+    for (const candidate of candidates) {
+        const candidateKey = `${normalizedTier}:${normalizedCategory}:${candidate}`;
+        if (pricingCache.has(candidateKey)) return pricingCache.get(candidateKey);
+    }
+    return null;
+};
+
+const calculateCost = (model, input, output, tier = 'standard', category = 'text') => {
+    const rate = getPricingRate(model, tier, category);
+    if (!rate) return 0;
+    const inputTokens = Number(input || 0);
+    const outputTokens = Number(output || 0);
+    return (inputTokens * rate.input) + (outputTokens * rate.output);
 };
 
 // 2. The Tracking Interceptor
@@ -109,8 +167,10 @@ const apiProxy = createProxyMiddleware({
 
                 if (proxyRes.headers['content-type']?.includes('application/json')) {
                     try {
+                        await ensurePricingCache();
                         const responseData = JSON.parse(rawBody);
                         const model = req.headers['x-model'] || responseData.model || 'unknown';
+                        const pricingTier = req.headers['x-pricing-tier'] || 'standard';
                         
                         // Get REAL token counts from OpenAI response
                         let inputTokens = 0;
@@ -127,7 +187,7 @@ const apiProxy = createProxyMiddleware({
                             console.log(`⚠️  Using fallback tokens: ${inputTokens} input, ${outputTokens} output`);
                         }
                         
-                        const estimatedCost = calculateCost(model, inputTokens, outputTokens);
+                        const estimatedCost = calculateCost(model, inputTokens, outputTokens, pricingTier, 'text');
 
                         const { error } = await supabase.from('api_usage_logs').insert({
                             user_id: req.headers['x-user-id'] || 'test_user',
@@ -204,6 +264,7 @@ app.get('/api/usage', async (req, res) => {
 // API endpoint for service breakdown
 app.get('/api/services', async (req, res) => {
     try {
+        await ensurePricingCache();
         const limit = Math.min(Number(req.query.limit || 100), 500);
         const offset = Math.max(Number(req.query.offset || 0), 0);
 
@@ -235,7 +296,9 @@ app.get('/api/services', async (req, res) => {
                     avg_latency: 0,
                     total_latency: 0,
                     last_used: log.created_at,
-                    estimated_cost: 0
+                    estimated_cost: 0,
+                    total_input_tokens: 0,
+                    total_output_tokens: 0
                 };
             }
             
@@ -246,7 +309,13 @@ app.get('/api/services', async (req, res) => {
                 serviceBreakdown[key].error_count += 1;
             }
             serviceBreakdown[key].total_latency += log.latency_ms || 0;
-            serviceBreakdown[key].estimated_cost += Number(log.estimated_cost || 0);
+            const inputTokensValue = log.input_tokens ?? log.token_input ?? 0;
+            const outputTokensValue = log.output_tokens ?? log.token_output ?? 0;
+            const storedCost = Number(log.estimated_cost || 0);
+            const computedCost = calculateCost(log.model || 'default', Number(inputTokensValue || 0), Number(outputTokensValue || 0), 'standard', 'text');
+            serviceBreakdown[key].estimated_cost += storedCost > 0 ? storedCost : computedCost;
+            serviceBreakdown[key].total_input_tokens += Number(inputTokensValue || 0);
+            serviceBreakdown[key].total_output_tokens += Number(outputTokensValue || 0);
             
             // Keep the most recent timestamp
             if (new Date(log.created_at) > new Date(serviceBreakdown[key].last_used)) {
@@ -263,7 +332,8 @@ app.get('/api/services', async (req, res) => {
             success_rate: service.total_hits > 0
                 ? ((service.success_count / service.total_hits) * 100).toFixed(1)
                 : 0,
-            estimated_cost: parseFloat(service.estimated_cost.toFixed(4))
+            estimated_cost: parseFloat(service.estimated_cost.toFixed(4)),
+            total_tokens: (service.total_input_tokens || 0) + (service.total_output_tokens || 0)
         })).sort((a, b) => b.total_hits - a.total_hits);
         
         res.json(result);

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Users, Activity, DollarSign, TrendingUp, ChevronDown, ChevronRight } from "lucide-react"
+import { Users, Activity, DollarSign, ChevronDown, ChevronRight } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -38,6 +38,9 @@ interface ServiceData {
   success_rate: string
   estimated_cost: number
   last_used: string
+  total_input_tokens: number
+  total_output_tokens: number
+  total_tokens: number
 }
 
 interface ClientData {
@@ -45,6 +48,7 @@ interface ClientData {
   total_services: number
   total_hits: number
   total_cost: number
+  total_tokens: number
   avg_success_rate: number
   services: ServiceData[]
 }
@@ -76,6 +80,7 @@ export function ClientsBreakdown() {
         const clientsData: ClientData[] = Array.from(clientMap.entries()).map(([user_id, services]) => {
           const total_hits = services.reduce((sum, s) => sum + s.total_hits, 0)
           const total_cost = services.reduce((sum, s) => sum + s.estimated_cost, 0)
+          const total_tokens = services.reduce((sum, s) => sum + (s.total_tokens || 0), 0)
           const avg_success_rate = services.reduce((sum, s) => sum + parseFloat(s.success_rate), 0) / services.length
 
           return {
@@ -83,6 +88,7 @@ export function ClientsBreakdown() {
             total_services: services.length,
             total_hits,
             total_cost,
+            total_tokens,
             avg_success_rate,
             services: services.sort((a, b) => b.total_hits - a.total_hits)
           }
@@ -204,6 +210,10 @@ export function ClientsBreakdown() {
                           <div className="text-sm font-medium text-muted-foreground">Total Cost</div>
                           <div className="text-xl font-bold">${client.total_cost.toFixed(4)}</div>
                         </div>
+                        <div className="text-right">
+                          <div className="text-sm font-medium text-muted-foreground">Total Tokens</div>
+                          <div className="text-xl font-bold">{client.total_tokens.toLocaleString()}</div>
+                        </div>
                         <div className="text-right min-w-[120px]">
                           <div className="text-sm font-medium text-muted-foreground">Success Rate</div>
                           <div className="flex items-center gap-2 justify-end">
@@ -227,6 +237,7 @@ export function ClientsBreakdown() {
                             <TableHead className="text-right">Success Rate</TableHead>
                             <TableHead className="text-right">Latency</TableHead>
                             <TableHead className="text-right">Cost</TableHead>
+                            <TableHead className="text-right">Tokens</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -259,6 +270,9 @@ export function ClientsBreakdown() {
                                 </TableCell>
                                 <TableCell className="text-right tabular-nums">
                                   ${service.estimated_cost.toFixed(4)}
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                  {(service.total_tokens || 0).toLocaleString()}
                                 </TableCell>
                               </TableRow>
                             )
