@@ -65,31 +65,47 @@ const apiProxy = createProxyMiddleware({
             let body = [];
             proxyRes.on('data', (chunk) => body.push(chunk));
             proxyRes.on('end', async () => {
-                let rawBody;
+                let rawBody = '';
                 const buffer = Buffer.concat(body);
-                
-                // Check if buffer is gzip compressed (magic bytes: 1f 8b)
-                const isGzipped = buffer[0] === 0x1f && buffer[1] === 0x8b;
-                
-                if (isGzipped) {
-                    // Decompress gzip
-                    try {
-                        rawBody = zlib.gunzipSync(buffer).toString();
-                        console.log(`✅ Decompressed gzip response`);
-                    } catch (err) {
-                        console.error(`❌ Gzip decompression failed: ${err.message}`);
-                        rawBody = buffer.toString();
+                const contentEncoding = (proxyRes.headers['content-encoding'] || '').toLowerCase();
+
+                const tryDecode = (buf) => buf.toString('utf8');
+                const tryGunzip = () => zlib.gunzipSync(buffer).toString('utf8');
+                const tryInflate = () => zlib.inflateSync(buffer).toString('utf8');
+                const tryBrotli = () => zlib.brotliDecompressSync(buffer).toString('utf8');
+
+                try {
+                    if (contentEncoding === 'gzip') rawBody = tryGunzip();
+                    else if (contentEncoding === 'deflate') rawBody = tryInflate();
+                    else if (contentEncoding === 'br') rawBody = tryBrotli();
+                    else rawBody = tryDecode(buffer);
+                } catch (err) {
+                    rawBody = tryDecode(buffer);
+                }
+
+                // If still not JSON, try additional decompression attempts (header may be missing)
+                const looksLikeJson = rawBody.trim().startsWith('{') || rawBody.trim().startsWith('[');
+                if (!looksLikeJson) {
+                    const isGzipped = buffer[0] === 0x1f && buffer[1] === 0x8b;
+                    if (isGzipped) {
+                        try {
+                            rawBody = tryGunzip();
+                            console.log(`✅ Decompressed gzip response (magic bytes)`);
+                        } catch {}
                     }
-                } else {
-                    // Already plain text
-                    rawBody = buffer.toString();
+                    if (!rawBody || !rawBody.trim().startsWith('{')) {
+                        try { rawBody = tryBrotli(); console.log(`✅ Decompressed brotli response`); } catch {}
+                    }
+                    if (!rawBody || !rawBody.trim().startsWith('{')) {
+                        try { rawBody = tryInflate(); console.log(`✅ Decompressed deflate response`); } catch {}
+                    }
                 }
 
                 // Log decompressed response (truncate if very long)
                 const displayBody = rawBody.length > 500 ? rawBody.substring(0, 500) + '...' : rawBody;
                 console.log(`📦 Decompressed Response: ${displayBody}`);
                 
-                console.log(`📥 Response: ${proxyRes.statusCode} | Content-Type: ${proxyRes.headers['content-type']}`);
+                console.log(`📥 Response: ${proxyRes.statusCode} | Content-Type: ${proxyRes.headers['content-type']} | Content-Encoding: ${contentEncoding || 'none'}`);
 
                 if (proxyRes.headers['content-type']?.includes('application/json')) {
                     try {
