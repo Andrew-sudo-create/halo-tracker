@@ -63,16 +63,27 @@ const apiProxy = createProxyMiddleware({
         },
         proxyRes: async (proxyRes, req, res) => {
             let body = [];
-            let stream = proxyRes;
-            
-            // Handle gzip compression
-            if (proxyRes.headers['content-encoding'] === 'gzip') {
-                stream = proxyRes.pipe(zlib.createGunzip());
-            }
-            
-            stream.on('data', (chunk) => body.push(chunk));
-            stream.on('end', async () => {
-                const rawBody = Buffer.concat(body).toString();
+            proxyRes.on('data', (chunk) => body.push(chunk));
+            proxyRes.on('end', async () => {
+                let rawBody;
+                const buffer = Buffer.concat(body);
+                
+                // Check if buffer is gzip compressed (magic bytes: 1f 8b)
+                const isGzipped = buffer[0] === 0x1f && buffer[1] === 0x8b;
+                
+                if (isGzipped) {
+                    // Decompress gzip
+                    try {
+                        rawBody = zlib.gunzipSync(buffer).toString();
+                        console.log(`✅ Decompressed gzip response`);
+                    } catch (err) {
+                        console.error(`❌ Gzip decompression failed: ${err.message}`);
+                        rawBody = buffer.toString();
+                    }
+                } else {
+                    // Already plain text
+                    rawBody = buffer.toString();
+                }
 
                 // Log decompressed response (truncate if very long)
                 const displayBody = rawBody.length > 500 ? rawBody.substring(0, 500) + '...' : rawBody;
