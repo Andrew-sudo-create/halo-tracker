@@ -1,16 +1,30 @@
-# API Gateway & Usage Tracker
+# Halo Tracker - API Gateway & Usage Analytics
 
-Track all your API calls, costs, and performance metrics in real-time.
+Track all your API calls, costs, and performance metrics in real-time across multiple AI providers.
+
+## 🎯 Features
+
+- **Real-time Usage Tracking** - Monitor API calls across OpenAI, Anthropic, and other providers
+- **Automatic Cost Calculation** - Track spending with accurate token-based pricing
+- **Multi-Service Support** - Track multiple services and endpoints from a single dashboard
+- **Token Usage Analytics** - Automatic extraction of token counts from API responses
+- **Beautiful Dashboard** - View analytics, trends, and breakdowns in real-time
+
+## 🏗️ Architecture
+
+- **Backend** (Node.js + Express): API gateway with request proxying and Supabase logging
+- **Frontend** (Next.js + shadcn/ui): Analytics dashboard with real-time metrics
+- **Database** (Supabase): Stores usage logs and pricing data with RLS policies
 
 ## 🚀 Quick Start
 
-### 1. Add Environment Variables
+### 1. Environment Setup
 
-Add these to your `.env` file:
+Create `.env` files for your services:
 
 ```env
-# API Gateway Configuration
-API_GATEWAY=https://halo-tracker-2c0dda3c06ff.herokuapp.com
+# For your application using the gateway
+API_GATEWAY=https://your-backend-url.herokuapp.com
 API_TARGET=https://api.openai.com
 SERVICE_NAME=YourAppName
 USER_ID=your_user_id
@@ -59,23 +73,60 @@ const response = await fetch(`${process.env.API_GATEWAY}/v1/chat/completions`, {
 });
 ```
 
-## 📋 Required Headers
+### 2. Backend Setup
 
-| Header | Description | Example |
-|--------|-------------|---------|
-| `x-target-url` | The actual API you're calling | `https://api.openai.com` |
-| `x-service-name` | Your app/service identifier | `ChatBot-Pro` |
-| `x-user-id` | User making the request | `user_123` |
-| `x-model` | Model being used (for cost calc) | `gpt-5.2`, `claude-4.5` |
-| `x-input-tokens` | Number of input tokens | `1500` |
-| `x-output-tokens` | Number of output tokens | `800` |
+```bash
+cd backend
+npm install
+cp .env.example .env.local
 
-## 💰 Supported Models & Pricing
+# Add your Supabase credentials to .env.local
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_anon_key
+ALLOWED_ORIGINS=http://localhost:3001,http://localhost:3000
+NODE_ENV=development
 
-| Model | Input Cost | Output Cost |
-|-------|------------|-------------|
-| `gpt-5.2` | $1.75 / 1M tokens | $14.00 / 1M tokens |
-| `claude-4.5` | $5.00 / 1M tokens | $25.00 / 1M tokens |
+npm start
+```
+
+### 3. Frontend Setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Visit `http://localhyour-backend-urlhboard.
+
+## 📋 API Headers
+
+When routing requests through the gateway, include these headers:
+
+| Header | Description | Required | Example |
+|--------|-------------|----------|---------|
+| `x-target-url` | The actual API endpoint | ✅ | `https://api.openai.com` |
+| `x-service-name` | Your app/service identifier | ✅ | `ChatBot-Pro` |
+| `x-user-id` | User making the request | ✅ | `user_123` |
+| `x-model` | Model being used | Optional* | `gpt-4`, `claude-3-opus` |
+| `x-input-tokens` | Number of input tokens | Optional* | `1500` |
+| `x-output-tokens` | Number of output tokens | Optional* | `800` |
+
+*Auto-extracted from OpenAI responses. Provide for other APIs or as fallback.
+
+## 💰 Pricing Configuration
+
+Pricing is stored in Supabase `model_pricing` table. The system supports:
+- Multiple pricing tiers (standard, batch, etc.)
+- Different categories (text, image, audio)
+- Cached input pricing
+- Per-million token pricing
+
+Example pricing entry:
+```sql
+INSERT INTO model_pricing (model, tier, category, input_per_million, output_per_million)
+VALUES ('gpt-4', 'standard', 'text', 0.03, 0.06);
+```
 
 ## 📊 Examples
 
@@ -119,7 +170,7 @@ async function getChatResponse(userMessage) {
 
 ```javascript
 // .env
-API_GATEWAY=https://halo-tracker-2c0dda3c06ff.herokuapp.com
+API_GATEWAY=https://your-backend-url.herokuapp.com
 API_TARGET=https://api.anthropic.com
 SERVICE_NAME=Claude-Assistant
 USER_ID=user_789
@@ -189,7 +240,7 @@ async function smartAPICall(messages, userId) {
 
 ```javascript
 // .env
-API_GATEWAY=https://halo-tracker-2c0dda3c06ff.herokuapp.com
+API_GATEWAY=https://your-backend-url.herokuapp.com
 SERVICE_NAME=Multi-Service-App
 
 // services/openai.js
@@ -280,33 +331,81 @@ app.post('/chat', async (req, res) => {
 });
 ```
 
-## 📈 View Analytics
+## 📈 Dashboard Features
 
-Access your dashboard to see:
-- **Real-time costs** per service
-- **Request volume** and trends
-- **Performance metrics** (latency, success rate)
-- **Service breakdown** by endpoint
+Access your analytics dashboard to view:
+- **Daily Usage Trends** - Line charts showing API hits and costs over time
+- **Service Breakdown** - See which services and endpoints are used most
+- **Cost Analytics** - Track spending per service with token counts
+- **Performance Metrics** - Monitor latency and success rates
+- **Client Breakdown** - View usage by user/client
 
-Dashboard URL: **https://halo-tracker-nu.vercel.app**
+## 🔧 API Endpoints
 
-## 🔧 Additional Endpoints
+The backend exposes these endpoints:
 
-### Check Gateway Health
+### Health Check
 ```bash
-GET https://halo-tracker-2c0dda3c06ff.herokuapp.com/api/health
+GET /api/health
+```
+Returns service status.
+
+### Usage Data
+```bash
+GET /api/usage
+```
+Returns daily aggregated usage data with hits, costs, and accumulative totals.
+
+### Service Breakdown
+```bash
+GET /api/services?limit=100&offset=0
+```
+Returns detailed breakdown by service, endpoint, and user with:
+- Total hits and success rate
+- Average latency
+- Token counts
+- Estimated costs
+
+## 🗄️ Database Schema
+
+### `api_usage_logs`
+Stores all API requests with:
+- `user_id`, `service_name`, `endpoint`
+- `status_code`, `latency_ms`
+- `model`, `input_tokens`, `output_tokens`
+- `estimated_cost`, `created_at`
+
+### `model_pricing`
+Stores pricing information:
+- `model`, `tier`, `category`
+- `input_per_million`, `output_per_million`
+- `cached_input_per_million`
+
+## 🔐 Security
+
+- Environment variables stored in `.env` files (never committed)
+- Supabase Row Level Security (RLS) policies protect data
+- CORS configured for allowed origins only
+- API keys passed through securely to target APIs
+
+## 🚀 Deployment
+
+**Backend (Heroku):**
+```bash
+git push heroku main
 ```
 
-### Get Usage Data
+**Frontend (Vercel):**
 ```bash
-GET https://halo-tracker-2c0dda3c06ff.herokuapp.com/api/usage
+vercel deploy
 ```
 
-### Get Service Breakdown
-```bash
-GET https://halo-tracker-2c0dda3c06ff.herokuapp.com/api/services
-```
+Set environment variables in respective platforms.
 
-## 🆘 Support
+## 📝 License
 
-Questions? Contact the platform team or check the dashboard for real-time monitoring.
+MIT
+
+## 🤝 Contributing
+
+Contributions welcome! Please ensure credentials are never committed to git.
