@@ -173,20 +173,11 @@ async function callClaude(prompt) {
     return await response.json();
 }
 ```
-
-### Example 3: Dynamic Token Counting
-
-```javascript
-import { encode } from 'gpt-tokenizer';
-
-async function smartAPICall(messages, userId) {
-    // Calculate input tokens
-    const messageText = messages.map(m => m.content).join(' ');
-    # Halo Tracker - API Gateway & Usage Analytics
+# Halo Tracker - API Gateway & Usage Analytics
 
     Halo Tracker is an API gateway that proxies requests to AI providers and logs usage (requests, latency, tokens, and cost) to Supabase so you can visualize usage in the dashboard.
 
-    ## How to use the Gateway URL (ask Gemini)
+## How to use the Gateway URL (ask Gemini)
 
     Ask Gemini something like this and follow the steps it returns:
 
