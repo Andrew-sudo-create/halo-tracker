@@ -72,33 +72,6 @@ const response = await fetch(`${process.env.API_GATEWAY}/v1/chat/completions`, {
     })
 });
 ```
-
-### 2. Backend Setup
-
-```bash
-cd backend
-npm install
-cp .env.example .env.local
-
-# Add your Supabase credentials to .env.local
-SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_anon_key
-ALLOWED_ORIGINS=http://localhost:3001,http://localhost:3000
-NODE_ENV=development
-
-npm start
-```
-
-### 3. Frontend Setup
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Visit `http://localhyour-backend-urlhboard.
-
 ## 📋 API Headers
 
 When routing requests through the gateway, include these headers:
