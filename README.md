@@ -79,8 +79,8 @@ When routing requests through the gateway, include these headers:
 | Header | Description | Required | Example |
 |--------|-------------|----------|---------|
 | `x-target-url` | The actual API endpoint | ✅ | `https://api.openai.com` |
-| `x-service-name` | Your app/service identifier | ✅ | `ChatBot-Pro` |
-| `x-user-id` | User making the request | ✅ | `user_123` |
+| `x-service-name` | Your app/service identifier | ✅ | `Halo-OCR` |
+| `x-user-id` | User making the request | ✅ | `Dr Debbie Haasbroek` |
 | `x-model` | Model being used | Optional* | `gpt-4`, `claude-3-opus` |
 | `x-input-tokens` | Number of input tokens | Optional* | `1500` |
 | `x-output-tokens` | Number of output tokens | Optional* | `800` |
@@ -173,11 +173,11 @@ async function callClaude(prompt) {
     return await response.json();
 }
 ```
-# Halo Tracker - API Gateway & Usage Analytics
+## Halo Tracker - API Gateway & Usage Analytics
 
     Halo Tracker is an API gateway that proxies requests to AI providers and logs usage (requests, latency, tokens, and cost) to Supabase so you can visualize usage in the dashboard.
 
-## How to use the Gateway URL (ask Gemini)
+### How to use the Gateway URL (ask Gemini)
 
     Ask Gemini something like this and follow the steps it returns:
 
