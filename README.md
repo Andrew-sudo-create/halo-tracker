@@ -2,6 +2,8 @@
 
 Track all your API calls, costs, and performance metrics in real-time across multiple AI providers.
 
+**GATEWAY URL** - https://halo-tracker-2c0dda3c06ff.herokuapp.com/
+
 ## 🎯 Features
 
 - **Real-time Usage Tracking** - Monitor API calls across OpenAI, Anthropic, and other providers
