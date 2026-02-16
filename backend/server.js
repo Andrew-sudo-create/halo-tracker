@@ -265,14 +265,14 @@ app.get('/api/usage', async (req, res) => {
 app.get('/api/services', async (req, res) => {
     try {
         await ensurePricingCache();
-        const limit = Math.min(Number(req.query.limit || 100), 500);
+        const limit = Math.min(Number(req.query.limit || 500), 500);
         const offset = Math.max(Number(req.query.offset || 0), 0);
 
+        // Fetch ALL records to aggregate properly, then paginate
         const { data, error } = await supabase
             .from('api_usage_logs')
             .select('*')
-            .order('created_at', { ascending: false })
-            .range(offset, offset + limit - 1);
+            .order('created_at', { ascending: false });
         
         if (error) throw error;
         
@@ -324,7 +324,7 @@ app.get('/api/services', async (req, res) => {
         });
         
         // Calculate averages and format results
-        const result = Object.values(serviceBreakdown).map(service => ({
+        const allResults = Object.values(serviceBreakdown).map(service => ({
             ...service,
             avg_latency: service.total_hits > 0 
                 ? Math.round(service.total_latency / service.total_hits) 
@@ -336,7 +336,10 @@ app.get('/api/services', async (req, res) => {
             total_tokens: (service.total_input_tokens || 0) + (service.total_output_tokens || 0)
         })).sort((a, b) => b.total_hits - a.total_hits);
         
-        res.json(result);
+        // Apply pagination to aggregated results
+        const paginatedResult = allResults.slice(offset, offset + limit);
+        
+        res.json(paginatedResult);
     } catch (error) {
         console.error('Error fetching services:', error);
         res.status(500).json({ error: error.message });
